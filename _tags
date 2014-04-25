@@ -1,0 +1,10 @@
+<**/*.{ml,mli}> : bin_annot
+<lib> : include
+<src> : include
+<lib/ripple_api_*.{ml,mli}> : package(atdgen)
+<lib/ripple.{ml,mli}> : package(lwt), package(websocket)
+<src/*.{ml,native,byte}> : package(lwt), \
+			   package(lwt.unix), \
+			   package(websocket), \
+			   package(atdgen), \
+			   package(uri)

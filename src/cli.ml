@@ -1,5 +1,6 @@
 open Lwt
 open Ripple_api_t
+open Ripple
 
 (* Help *)
 

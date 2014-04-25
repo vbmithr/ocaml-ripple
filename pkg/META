@@ -1,0 +1,8 @@
+version = "0.1"
+description = "Ripple bindings"
+requires = "lwt.unix atdgen websocket uri"
+archive(byte) = "ripple.cma"
+archive(byte, plugin) = "ripple.cma"
+archive(native) = "ripple.cmxa"
+archive(native, plugin) = "ripple.cmxs"
+exists_if = "ripple.cma"
