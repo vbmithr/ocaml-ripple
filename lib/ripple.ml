@@ -12,15 +12,9 @@ struct
   let rec response_handler ~stream ~push () =
     let open Websocket in
     Lwt_stream.next stream >>= fun frame ->
-    begin
-      match Frame.opcode frame with
-      | `Ping ->
-        push (Some (Frame.of_string ~opcode:`Pong ""))
-      | _ ->
         Websocket.Frame.content frame
         |> Ripple_api_j.response_of_string
         |> RC.handler
-    end
     >>= response_handler ~stream ~push ~handler
 
   let websocket_connection =
@@ -140,14 +134,6 @@ module Ripple = struct
   open Lwt
   open Ripple_api_t
 
-  let ping_handler ~push frame =
-    match Websocket.Frame.opcode frame with
-    | `Ping ->
-        push (Some (Websocket.Frame.of_string ~opcode:`Pong ""));
-        None
-    | _ ->
-        Some frame
-
   let response_handler frame =
     Websocket.Frame.content frame
   (* TODO: use [response_handler] to transform string to responses
@@ -155,10 +141,9 @@ module Ripple = struct
   (* |> Ripple_api_j.response_of_string *)
 
   let open_connection uri =
-    Websocket.open_connection uri >>= fun (ws_stream, ws_pushfun) ->
-    let stream =
-      Lwt_stream.filter_map (ping_handler ~push:ws_pushfun) ws_stream
-      |> Lwt_stream.map Websocket.Frame.content in
+    let open Websocket in
+    open_connection uri >>= fun (ws_stream, ws_pushfun) ->
+    let stream = Lwt_stream.map Frame.content ws_stream in
     Lwt.return (stream, ws_pushfun)
 
   let with_transactions uri =
@@ -170,14 +155,12 @@ module Ripple = struct
     | `Error -> Lwt.fail (Failure json_str)
 
   let with_connection server ripple_handler =
-    let handler (stream_ws, push_ws) =
-      let stream =
-        Lwt_stream.filter_map (ping_handler ~push:push_ws) stream_ws
-        |> Lwt_stream.map response_handler
+    let handler (ws_stream, ws_pushfun) =
+      let stream = Lwt_stream.map response_handler ws_stream
       in
       let push cmd =
         let req = Ripple_api_j.string_of_request { request_id = Random.bits (); request_command = cmd } in
-        push_ws (Some (Websocket.Frame.of_string req))
+        ws_pushfun (Some (Websocket.Frame.of_string req))
       in
       ripple_handler (stream, push)
     in
