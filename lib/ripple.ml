@@ -92,9 +92,8 @@ module Util = struct
 end
 
 module Transaction = struct
+  open WSAPI
   (* High level transaction types *)
-
-  module R = Ripple_api_t
 
   type node_op =
     | Created
@@ -103,42 +102,51 @@ module Transaction = struct
 
   type node =
     { op: node_op;
-      node_content: R.node
+      node_content: Node.t
     }
 
   let nodes_of_tx t =
-    let open R in
-    let affected_nodes = t.tx_msg_meta.tx_meta_affected_nodes in
+    let open Node in
+    let affected_nodes = t.Transaction.affected_nodes in
     List.map
       (function
-        | { created_node=(Some n); modified_node=None; deleted_node=None } -> { op=Created; node_content=n }
-        | { created_node=None; modified_node=(Some n); deleted_node=None } -> { op=Modified; node_content=n }
-        | { created_node=None; modified_node=None; deleted_node=(Some n) } -> { op=Deleted; node_content=n }
+        | { created=(Some n); modified=None; deleted=None } ->
+            { op=Created; node_content=n }
+        | { created=None; modified=(Some n); deleted=None } ->
+            { op=Modified; node_content=n }
+        | { created=None; modified=None; deleted=(Some n) } ->
+            { op=Deleted; node_content=n }
         | _ -> raise (Invalid_argument "is_trade")
       ) affected_nodes
 
   let offer_nodes_of_tx t =
-    let open R in
+    let open Node in
     let nodes = nodes_of_tx t in
-    List.filter (fun {op; node_content} -> node_content.node_ledger_entry_type = "Offer") nodes
+    List.filter
+      (fun {op; node_content} ->
+         node_content.ledger_entry_type = "Offer")
+      nodes
 
   let is_trade t =
-    let open R in
+    let open Node in
     let nodes = nodes_of_tx t in
     let nodes = List.map (fun {op; node_content} -> node_content) nodes in
-    List.exists (fun n -> n.node_ledger_entry_type = "Offer") nodes
-
+    List.exists (fun n -> n.ledger_entry_type = "Offer") nodes
 end
 
 module Ripple = struct
+  open WSAPI
+
+  exception Yojson_error of string
+  exception Ripple_error of string
+
   open Lwt
-  open Ripple_api_t
 
   let response_handler frame =
-    Websocket.Frame.content frame
-  (* TODO: use [response_handler] to transform string to responses
-   * defined in ATD file. *)
-  (* |> Ripple_api_j.response_of_string *)
+  (* TODO: use [response_handler] to transform string to responses *)
+    match Websocket.Frame.content frame with
+    | None -> raise (Ripple_error "frame with no content")
+    | Some c -> c
 
   let open_connection uri =
     let open Websocket in
@@ -148,19 +156,32 @@ module Ripple = struct
 
   let with_transactions uri =
     open_connection uri >>= fun (stream, pushfun) ->
-    pushfun (Some (Websocket.Frame.of_string "{ \"id\": 345, \"command\": \"subscribe\", \"streams\": [\"transactions\"]}"));
-    Lwt_stream.next stream >>= fun json_str ->
-    match (Ripple_api_j.response_of_string json_str).response_status with
-    | `Success -> Lwt.return stream
-    | `Error -> Lwt.fail (Failure json_str)
+    let content = Subscribe.(make ~streams:["transactions"] () |>
+                             to_yojson |> Yojson.Safe.to_string) in
+    Printf.printf "%s\n%!" content;
+    pushfun (Some (Websocket.Frame.of_string ~content ()));
+    Lwt_stream.next stream >>= function
+    | None ->
+        fail Not_found (* Frame has no content, should not happen *)
+    | Some json_str ->
+        Printf.printf "%s\n%!" json_str;
+        let json = Yojson.Safe.from_string json_str in
+        match Response.(of_yojson json) with
+        | `Error yojson_error -> fail (Yojson_error yojson_error)
+        | `Ok resp ->
+            match Response.wrap resp with
+            | `Error ripple_error -> fail (Ripple_error ripple_error)
+            | `Ok -> return stream
 
   let with_connection server ripple_handler =
     let handler (ws_stream, ws_pushfun) =
       let stream = Lwt_stream.map response_handler ws_stream
       in
-      let push cmd =
-        let req = Ripple_api_j.string_of_request { request_id = Random.bits (); request_command = cmd } in
-        ws_pushfun (Some (Websocket.Frame.of_string req))
+      let push command =
+        let req_yojson =
+          Request.(to_yojson { id = Random.bits (); command; }) in
+        let req = Yojson.Safe.to_string req_yojson in
+        ws_pushfun (Some (Websocket.Frame.of_string ~content:req ()))
       in
       ripple_handler (stream, push)
     in

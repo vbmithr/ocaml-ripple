@@ -1,5 +1,4 @@
 open Lwt
-open Ripple_api_t
 open Ripple
 
 (* Help *)
@@ -20,14 +19,8 @@ let rec prompt mvar ~push =
   Lwt_mvar.take mvar >>= fun () ->
   Lwt_io.print "> " >>= fun () ->
   Lwt_io.read_line Lwt_io.stdin >>= fun cmd ->
-    try
-      push (List.assoc cmd commands);
-      prompt mvar ~push
-    with
-    | Not_found ->
-        print_commands () >>= fun () ->
-        Lwt_mvar.put mvar () >>= fun () ->
-        prompt mvar ~push
+  push cmd;
+  prompt mvar ~push
 
 (* Ripple receiver *)
 
@@ -48,6 +41,7 @@ let ripple_handler (stream, push) =
 (* Main *)
 
 let main () =
+  Tls_lwt.rng_init () >>= fun () ->
   Lwt_io.printl "**** Ripple Test Client ****" >>= fun () ->
   print_commands () >>= fun () ->
   let server_url =
