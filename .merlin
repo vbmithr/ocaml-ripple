@@ -1,0 +1,14 @@
+PRJ ripple
+S lib/.
+S lib_thin/.
+S src/.
+B _build/lib
+B _build/lib_thin
+B _build/src
+PKG findlib
+PKG yojson
+PKG lwt.unix
+PKG websocket
+PKG re.pcre
+PKG sexplib
+PKG cmdliner
