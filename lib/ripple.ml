@@ -158,7 +158,6 @@ module Ripple = struct
     open_connection uri >>= fun (stream, pushfun) ->
     let content = Subscribe.(make ~streams:["transactions"] () |>
                              to_yojson |> Yojson.Safe.to_string) in
-    Printf.printf "%s\n%!" content;
     pushfun (Some (Websocket.Frame.of_string ~content ()));
     Lwt_stream.next stream >>= function
     | None ->

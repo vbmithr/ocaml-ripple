@@ -44,10 +44,10 @@ module Response = struct
     id : int;
     result: Yojson.Safe.json;
     ty [@key "type"]: string;
-    status : string;               (* "success" or "error" *)
-    error : string option;         (* If an error happens *)
-    error_message : string option;
-    request : Request.t option;
+    status : string;                        (* "success" or "error" *)
+    error : string option [@default None];  (* If an error happens *)
+    error_message : string option [@default None];
+    request : Request.t option [@default None];
   } [@@deriving Yojson]
 
   let wrap r = match r.status, r.error with
@@ -92,9 +92,9 @@ module Subscribe = struct
   type t = {
     id: int;
     command: string;
-    streams: string list option;
-    accounts: string list option;
-    accounts_proposed: string list option;
+    streams: string list option [@default None];
+    accounts: string list option [@default None];
+    accounts_proposed: string list option [@default None];
   } [@@deriving Yojson]
 
   let make ?(id=Random.bits ()) ?streams () =
